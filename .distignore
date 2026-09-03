@@ -1,0 +1,31 @@
+# Files / directories excluded from the WordPress.org plugin SVN build.
+# This is the inverse of .gitignore: anything listed here is NOT shipped
+# to users when WP.org packages the plugin zip.
+
+/.git
+/.github
+/.idea
+/.vscode
+
+/node_modules
+/vendor
+
+/tests
+/tests/**/*
+/phpunit.xml.dist
+/phpcs.xml.dist
+/composer.json
+/composer.lock
+/.gitignore
+/.distignore
+/README.md
+/LICENSE
+
+# Build artifacts
+*.zip
+*.tar.gz
+*.log
+
+# OS / editor
+.DS_Store
+Thumbs.db

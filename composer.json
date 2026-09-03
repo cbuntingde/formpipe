@@ -1,0 +1,42 @@
+{
+	"name": "cbuntingde/formpipe",
+	"description": "FormPipe — a small WordPress contact-form plugin.",
+	"type": "wordpress-plugin",
+	"license": "GPL-2.0-or-later",
+	"keywords": ["wordpress", "plugin", "contact-form", "forms"],
+	"homepage": "https://github.com/cbuntingde/formpipe",
+	"authors": [
+		{ "name": "FormPipe", "homepage": "https://github.com/cbuntingde/formpipe" }
+	],
+	"support": {
+		"issues": "https://github.com/cbuntingde/formpipe/issues",
+		"source": "https://github.com/cbuntingde/formpipe"
+	},
+	"require": {
+		"php": ">=8.0"
+	},
+	"require-dev": {
+		"php": ">=8.0",
+		"dealerdirect/phpcodesniffer-composer-installer": "^1.0",
+		"wp-coding-standards/wpcs": "^3.0",
+		"phpcompatibility/phpcompatibility-wp": "^2.1",
+		"phpunit/phpunit": "^9.6",
+		"wp-phpunit/wp-phpunit": "^6.5"
+	},
+	"scripts": {
+		"lint": "phpcs",
+		"lint:fix": "phpcbf",
+		"test": "phpunit",
+		"test:smoke": "phpunit --testsuite smoke",
+		"check": [
+			"@lint",
+			"@test"
+		]
+	},
+	"config": {
+		"allow-plugins": {
+			"dealerdirect/phpcodesniffer-composer-installer": true
+		},
+		"sort-packages": true
+	}
+}

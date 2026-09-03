@@ -1,0 +1,25 @@
+<?xml version="1.0"?>
+<phpunit
+	bootstrap="tests/phpunit/bootstrap.php"
+	backupGlobals="false"
+	colors="true"
+	beStrictAboutTestsThatDoNotTestAnything="false"
+	cacheDirectory=".phpunit.cache"
+	>
+	<testsuites>
+		<testsuite name="formpipe">
+			<directory suffix=".php">./tests/phpunit/tests</directory>
+			<exclude>./tests/phpunit/bootstrap.php</exclude>
+			<exclude>./tests/smoke.php</exclude>
+		</testsuite>
+		<testsuite name="smoke">
+			<file>./tests/smoke.php</file>
+		</testsuite>
+	</testsuites>
+	<coverage>
+		<include>
+			<directory suffix=".php">./includes</directory>
+			<directory suffix=".php">./modules</directory>
+		</include>
+	</coverage>
+</phpunit>
