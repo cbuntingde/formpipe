@@ -36,3 +36,17 @@ yarn-error.log*
 # WP / plugin dev
 .phan/
 .psalm/
+
+# AGENTS.md — local-only testing, never commit CI
+# Test runner configs belong here, not in the repo.
+/phpunit.xml.dist
+/phpcs.xml.dist
+/phpunit.xml
+/phpcs.xml
+/.wp-env.json
+
+# CI workflows — never committed (AGENTS.md)
+/.github/workflows/
+
+# Local test sources — never committed (AGENTS.md)
+/tests/
