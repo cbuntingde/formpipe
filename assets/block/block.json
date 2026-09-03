@@ -1,0 +1,16 @@
+{
+	"$schema": "https://schemas.wp.org/trunk/block.json",
+	"apiVersion": 3,
+	"name": "formpipe/form",
+	"title": "FormPipe Form",
+	"category": "widgets",
+	"icon": "feedback",
+	"description": "Embed a FormPipe form.",
+	"keywords": ["form", "contact"],
+	"textdomain": "formpipe",
+	"attributes": {
+		"formId": { "type": "number", "default": 0 }
+	},
+	"editorScript": "file:./index.js",
+	"render": "file:./render.php"
+}

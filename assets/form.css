@@ -1,0 +1,48 @@
+.formpipe .formpipe-control { display: block; margin: 0 0 .75em; }
+.formpipe .formpipe-control input[type="text"],
+.formpipe .formpipe-control input[type="email"],
+.formpipe .formpipe-control input[type="url"],
+.formpipe .formpipe-control input[type="tel"],
+.formpipe .formpipe-control input[type="number"],
+.formpipe .formpipe-control input[type="date"],
+.formpipe .formpipe-control input[type="time"],
+.formpipe .formpipe-control input[type="file"],
+.formpipe .formpipe-control textarea,
+.formpipe .formpipe-control select {
+	width: 100%;
+	max-width: 32em;
+	padding: .4em .6em;
+	border: 1px solid #8c8f94;
+	background: #fff;
+	border-radius: 2px;
+	box-sizing: border-box;
+}
+.formpipe .formpipe-control-checkbox label,
+.formpipe .formpipe-control-radio label { display: block; margin: .15em 0; }
+.formpipe .formpipe-control label { display: inline-flex; gap: .5em; align-items: center; }
+
+.formpipe .formpipe-form[data-status="invalid"] .formpipe-field:invalid,
+.formpipe .formpipe-form[data-status="invalid"] .formpipe-not-valid-tip-visible { outline: 2px solid #b32d2e; }
+
+.formpipe .formpipe-response-output { margin-top: 1em; padding: .5em .75em; border-radius: 2px; }
+.formpipe .formpipe-response-output:empty { display: none; }
+.formpipe .formpipe-response-output[data-status="invalid"] { color: #b32d2e; }
+.formpipe .formpipe-response-output[data-status="mail_sent"] { color: #2e7d32; background: #e6f4ea; }
+.formpipe .formpipe-response-output[data-status="spam"],
+.formpipe .formpipe-response-output[data-status="mail_failed"] { color: #6b6b6b; background: #f6f7f7; }
+.formpipe .formpipe-response-output[data-status="acceptance_missing"] { color: #b32d2e; background: #fcf0f1; }
+
+.formpipe .formpipe-not-valid-tip { color: #b32d2e; font-size: .85em; margin-top: .25em; display: block; }
+.formpipe .formpipe-not-valid-tip:empty { display: none; }
+
+.formpipe .formpipe-submit { cursor: pointer; padding: .5em 1em; background: #2271b1; color: #fff; border: 0; border-radius: 2px; }
+.formpipe .formpipe-submit:hover { background: #135e96; }
+.formpipe .formpipe-submit[disabled] { opacity: .6; cursor: progress; }
+
+.formpipe .formpipe-quiz { display: block; margin: 0 0 .75em; }
+.formpipe .formpipe-quiz-question { display: block; margin-bottom: .25em; }
+
+.formpipe .formpipe-count { display: inline-block; font-size: .85em; color: #50575e; margin-left: .5em; }
+
+.formpipe .formpipe-response-field { display: block; padding: .25em 0; }
+.formpipe .formpipe-response-label { font-weight: 600; margin-right: .5em; }

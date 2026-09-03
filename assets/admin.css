@@ -1,0 +1,33 @@
+.formpipe-editor .nav-tab-wrapper { margin: 1em 0 0; }
+.formpipe-editor .formpipe-tab[hidden] { display: none; }
+.formpipe-editor .formpipe-tabs .nav-tab { cursor: pointer; }
+
+.formpipe-editor .formpipe-tag-dialog {
+	width: min(640px, 90vw);
+	border: 1px solid #ccd0d4;
+	padding: 1em;
+	border-radius: 4px;
+	background: #fff;
+	box-shadow: 0 4px 16px rgba(0,0,0,.1);
+}
+.formpipe-editor .formpipe-tag-dialog[open] { display: block; }
+.formpipe-editor .formpipe-tag-dialog:not([open]) { display: none; }
+
+.formpipe-editor .formpipe-tag-buttons { margin-top: 1em; text-align: right; }
+
+.formpipe-integrations .formpipe-integration-card {
+	border: 1px solid #ccd0d4;
+	border-radius: 4px;
+	padding: 1em;
+	margin-bottom: 1em;
+	background: #fff;
+}
+.formpipe-integrations .formpipe-integration-card.active { border-color: #2271b1; }
+
+.formpipe-editor .formpipe-tag-generator-buttons {
+	display: flex;
+	flex-wrap: wrap;
+	gap: .35em;
+	margin-bottom: .5em;
+}
+.formpipe-editor .formpipe-tag-generator-buttons .button { white-space: nowrap; }
