@@ -16,18 +16,11 @@
  */
 
 declare(strict_types=1);
-
 define( 'ABSPATH', __DIR__ . '/' );
-define( 'FORMPIPE_VERSION', '1.0.0' );
-define( 'FORMPIPE_FILE', __DIR__ . '/formpipe.php' );
-define( 'FORMPIPE_DIR', __DIR__ );
+define( 'MINUTE_IN_SECONDS', 60 );
+define( 'HOUR_IN_SECONDS',   3600 );
+define( 'DAY_IN_SECONDS',    86400 );
 
-// ---------- minimal WordPress shims ----------
-
-$GLOBALS['__filters'] = [];
-$GLOBALS['__actions'] = [];
-
-function plugin_dir_path( $f )   { return dirname( $f ) . '/'; }
 function untrailingslashit( $s ) { return rtrim( $s, '/\\' ); }
 function trailingslashit( $s )   { return rtrim( $s, '/\\' ) . '/'; }
 function path_join( ...$parts )  { return implode( '/', array_filter( $parts ) ); }
@@ -67,7 +60,7 @@ function wp_unique_filename( $d, $n ) { return $n; }
 function wp_mkdir_p( $d )        { return is_dir( $d ) || @mkdir( $d, 0755, true ); }
 function get_option( $k, $d = false ) { return $d; }
 function get_the_ID( $fallback = 0 ) { return 0; }
-function in_the_loop()           { return false; }
+function home_url()                  { return 'http://example.org'; }
 function current_user_can( ...$a ){ return true; }
 function is_user_logged_in()     { return false; }
 function wp_get_current_user()    { return (object) [ 'ID' => 0 ]; }
@@ -88,6 +81,7 @@ function wp_create_nonce( $a )    { return 'nonce'; }
 function wp_verify_nonce( $n, $a ) { return 1; }
 function check_admin_referer( $a, $q = '' ) { /* no-op */ }
 function wp_safe_redirect( $u )   { /* no-op */ exit; }
+function wp_mail( $to, $subj, $body, $headers = '', $atts = [] ) { return true; }
 function add_query_arg( $a = [], $u = '' ) { return 'http://example.org/?p=1'; }
 function remove_query_arg( $k, $u = '' ) { return $u; }
 function load_plugin_textdomain( $d, $a = false, $p = '' ) { /* no-op */ }
@@ -156,16 +150,10 @@ function wp_upload_dir() { return [ 'basedir' => sys_get_temp_dir(), 'baseurl' =
 function MB_IN_BYTES() { return 1048576; }
 function KB_IN_BYTES() { return 1024; }
 function GB_IN_BYTES() { return 1024 * 1024 * 1024; }
-function MINUTE_IN_SECONDS() { return 60; }
-function HOUR_IN_SECONDS()   { return 3600; }
 function wptexturize( $s )   { return (string) $s; }
 function wpautop( $s )       { return (string) $s; }
 function did_action( $a )    { return 0; }
-function do_action_ref_array( $a, $b ) { /* no-op */ }
-function mysql2date( $f, $d ) { return $d; }
-function absint( $v ) { return abs( (int) $v ); }
-function get_user_option( $k, $u = false ) { return false; }
-function add_screen_option( $a, $b ) { /* no-op */ }
+
 function wp_list_table( $a = [] ) { return null; }
 
 function apply_filters_ref_array( $tag, $args ) {
@@ -560,8 +548,87 @@ if ( ! is_wp_error( $r3 ) || $r3->get_error_code() !== 'formpipe_upload_too_larg
 }
 @unlink( $big );
 
-echo "PASS file upload (polyglot/size)
-";
+echo "PASS file upload (polyglot/size)\n";
+
+// ---------- 12b. Upload regressions for F2/F3 (layered rejection) ----------
+
+// Layer-3 scan: a real PNG header followed by PHP bytes. The magic-byte
+// sniff classifies it as PNG, so layer 2 alone would let it through;
+// layer 3 (PHP-bytes scan) must reject.
+$poly2 = tempnam( sys_get_temp_dir(), 'fp_poly2_' );
+file_put_contents( $poly2, $png . "\n<?php echo 'x' ?>\n" );
+$r4 = \FormPipe\formpipe_handle_upload(
+	[
+		'name'     => [ 'real.png' ],
+		'type'     => [ 'image/png' ],
+		'tmp_name' => [ $poly2 ],
+		'error'    => [ 0 ],
+		'size'     => [ filesize( $poly2 ) ?: 1024 ],
+	],
+	[
+		'limit'                   => 25 * 1024 * 1024,
+		'filetypes'               => 'png',
+		'bypass_is_uploaded_file' => true,
+	]
+);
+if ( ! is_wp_error( $r4 ) || $r4->get_error_code() !== 'formpipe_upload_type' ) {
+	@unlink( $poly2 );
+	fwrite( STDERR, "FAIL: real-header + PHP-body polyglot accepted\n" );
+	exit( 1 );
+}
+@unlink( $poly2 );
+
+// Double-extension: stem contains "php" so the script-bait regex catches it.
+$de = tempnam( sys_get_temp_dir(), 'fp_de_' );
+file_put_contents( $de, $png );
+$r5 = \FormPipe\formpipe_handle_upload(
+	[
+		'name'     => [ 'evil.php.png' ],
+		'type'     => [ 'image/png' ],
+		'tmp_name' => [ $de ],
+		'error'    => [ 0 ],
+		'size'     => [ strlen( $png ) ],
+	],
+	[
+		'limit'                   => 25 * 1024 * 1024,
+		'filetypes'               => 'png',
+		'bypass_is_uploaded_file' => true,
+	]
+);
+if ( ! is_wp_error( $r5 ) || $r5->get_error_code() !== 'formpipe_upload_type' ) {
+	@unlink( $de );
+	fwrite( STDERR, "FAIL: evil.php.png not rejected at stem check\n" );
+	exit( 1 );
+}
+@unlink( $de );
+
+// phar base name.
+$ph = tempnam( sys_get_temp_dir(), 'fp_ph_' );
+file_put_contents( $ph, '<?php __HALT_COMPILER(); ?>' );
+$r6 = \FormPipe\formpipe_handle_upload(
+	[
+		'name'     => [ 'phar' ],
+		'type'     => [ 'application/octet-stream' ],
+		'tmp_name' => [ $ph ],
+		'error'    => [ 0 ],
+		'size'     => [ filesize( $ph ) ?: 32 ],
+	],
+	[
+		'limit'                   => 25 * 1024 * 1024,
+		'filetypes'               => 'png,pdf',
+		'bypass_is_uploaded_file' => true,
+	]
+);
+if ( ! is_wp_error( $r6 ) || $r6->get_error_code() !== 'formpipe_upload_type' ) {
+	@unlink( $ph );
+	fwrite( STDERR, "FAIL: phar base name not rejected\n" );
+	exit( 1 );
+}
+@unlink( $ph );
+
+echo "PASS file upload (layered rejection)\n";
+
+ // ---------- 13. REST /feedback rate limit + captcha gate ----------
 
 	// ---------- 13. REST /feedback rate limit + captcha gate ----------
 
@@ -612,4 +679,126 @@ echo "PASS file upload (polyglot/size)
 
 	echo "PASS REST rate limit + captcha gate\n";
 
-	echo "\nAll smoke checks passed.\n";
+
+// ---------- 14. Posted-data hash mirrors the JS djb2 contract ----------
+//
+// Regression for F1: the server-side hash and the JS-side hash must agree
+// byte-for-byte. The client computes djb2 over `tick + '|' + unit_tag +
+// '|' + sorted(k=v\n)` from raw FormData; the server must reproduce it
+// over the raw (un-sanitized) POST.
+
+$tick      = (string) (int) ceil( time() / ( MINUTE_IN_SECONDS / 2 ) );
+$unit_tag  = 'fp1-f1-o1';
+
+// Mirror what the JS would send for a 2-field submission.
+$posted_raw = [
+	'your-name'         => 'Ada Lovelace',
+	'your-email'        => 'ada@example.org',
+	'_formpipe'        => '1',
+	'_formpipe_unit_tag' => $unit_tag,
+	'_formpipe_posted_hash' => '',  // value at hash-time is empty
+	'_formpipe_rendered_at' => (string) ( time() - 5 ),
+	'_hp_' . $unit_tag  => '',
+];
+
+$server_hash = \FormPipe\formpipe_posted_data_hash( $posted_raw, $tick, $unit_tag );
+
+// Reproduce the same algorithm in pure PHP to confirm agreement.
+// Both sides exclude `_formpipe_posted_hash` from the iteration so the
+// JS-side hash (computed while the field is still empty) and the
+// server-side recomputation land on the same string.
+$buf = $tick . '|' . $unit_tag . '|';
+$keys = array_keys( $posted_raw );
+$keys = array_values( array_filter( $keys, static fn( $k ) => $k !== '_formpipe_posted_hash' ) );
+sort( $keys, SORT_STRING );
+foreach ( $keys as $k ) {
+	$val = (string) $posted_raw[ $k ];
+	if ( strlen( $val ) > 256 ) {
+		$val = substr( $val, 0, 256 );
+	}
+	$buf .= $k . '=' . $val . "\n";
+}
+$h = 5381;
+$len = strlen( $buf );
+for ( $i = 0; $i < $len; $i++ ) {
+	$h = ( ( ( $h << 5 ) + $h ) ^ ord( $buf[ $i ] ) ) & 0xFFFFFFFF;
+}
+$expected = substr( sprintf( '%08x', $h ), -8 );
+
+if ( $server_hash !== $expected ) {
+	fwrite( STDERR, "FAIL posted-hash server vs canonical: $server_hash != $expected\n" );
+	exit( 1 );
+}
+
+if ( ! preg_match( '/^[0-9a-f]{8}$/', $server_hash ) ) {
+	fwrite( STDERR, "FAIL posted-hash shape: $server_hash\n" );
+	exit( 1 );
+}
+
+echo "PASS posted-data hash (matches djb2 contract)\n";
+
+// ---------- 15. Submission::run() end-to-end produces mail_sent ----------
+//
+// Builds a complete Submission, plugs in a matching hash + render time,
+// runs the pipeline, and confirms we land on status=mail_sent — not
+// status=spam (which is what the pre-F1-fix code always returned).
+
+\FormPipe\FormTagsManager::reset();
+$form = \FormPipe\Form::blank();
+$form->mail       = [
+	'active'    => true,
+	'recipient' => 'admin@example.org',
+	'subject'   => 'New submission',
+	'body'      => "From: [your-name] <[your-email]>\nTerms: [terms]\n",
+];
+$form->mail_2     = [ 'active' => false ];
+$form->messages   = [];
+\FormPipe\FormTagsManager::scan( $form->template );
+\FormPipe\Form::set_current( $form );
+
+$unit_tag = $form->unit_tag();
+$now      = time();
+
+$posted = [
+	'your-name'               => 'Ada Lovelace',
+	'your-email'              => 'ada@example.org',
+	'terms'                   => '1',
+	'_formpipe'               => '1',
+	'_formpipe_unit_tag'      => $unit_tag,
+	'_formpipe_rendered_at'   => (string) ( $now - 5 ),
+	'_hp_' . $unit_tag        => '',
+	// _formpipe_posted_hash starts absent; client computes it before
+	// placing it into the form (see assets/form.js). Server iterates
+	// the raw POST while excluding the hash key.
+];
+
+$tick           = (string) (int) ceil( $now / ( MINUTE_IN_SECONDS / 2 ) );
+$posted['_formpipe_posted_hash'] = \FormPipe\formpipe_posted_data_hash( $posted, $tick, $unit_tag );
+$_POST = $posted;
+$_SERVER['REMOTE_ADDR']   = '203.0.113.7';
+$_SERVER['HTTP_USER_AGENT'] = 'smoke';
+
+$submission = new \FormPipe\Submission( $form, $posted );
+$result     = $submission->run();
+
+if ( ( $result['status'] ?? '' ) !== 'mail_sent' ) {
+	fwrite( STDERR, "FAIL submission run: expected mail_sent, got " . $result['status'] . " — message: " . ( $result['message'] ?? '' ) . "\n" );
+	exit( 1 );
+}
+
+echo "PASS submission end-to-end (mail_sent)\n";
+
+// And confirm the regression itself: a Submission with no posted hash at
+// all should also pass (hash check is skipped silently).
+$_POST = $posted;
+unset( $_POST['_formpipe_posted_hash'] );
+$submission2 = new \FormPipe\Submission( $form, $posted );
+$result2     = $submission2->run();
+if ( ( $result2['status'] ?? '' ) !== 'mail_sent' ) {
+	fwrite( STDERR, "FAIL submission run (no hash): got " . $result2['status'] . "\n" );
+	exit( 1 );
+}
+
+echo "PASS submission end-to-end (no hash)\n";
+
+echo "\nAll smoke checks passed.\n";

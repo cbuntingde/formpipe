@@ -313,13 +313,55 @@ function formpipe_is_rtl_locale( string $locale ): bool {
 
 /**
  * Build a posted-data hash for replay protection.
+ *
+ * Mirrors `buildPostedHash()` in assets/form.js exactly. The client sends
+ * the result of a djb2 over `tick + '|' + unit_tag + '|' + sorted_kv`,
+ * where each `kv` is `key + '=' + String(value).slice(0,256) + '\n'`.
+ * The server must reproduce that byte stream so `hash_equals()` agrees.
+ *
+ * Iteration is over the un-sanitized POST: the JS side includes the
+ * internal `_formpipe_*` keys (which `Submission::sanitize()` strips), so
+ * hashing the sanitized array would never match.
+ *
+ * @param array<string,mixed> $posted Raw posted values (un-sanitized).
+ * @param string             $tick   Server-side tick, in 30s units.
+ * @param string             $unit_tag  Form unit-tag from the request.
  */
-function formpipe_posted_data_hash( array $posted, string $tick, string $unit_tag, string $remote_ip ): string {
-	$concat = $tick . '|' . $remote_ip . '|' . $unit_tag . '|';
-	foreach ( $posted as $k => $v ) {
-		$concat .= $k . '=' . formpipe_flatten( $v ) . "\n";
+function formpipe_posted_data_hash( array $posted, string $tick, string $unit_tag ): string {
+	$buf = $tick . '|' . $unit_tag . '|';
+
+	$keys = array_map( 'strval', array_keys( $posted ) );
+	// The hash field itself isn't part of the input — the client computes
+	// the hash while the field is still empty in the DOM, then drops the
+	// result into the field. Excluding the key on both sides keeps the
+	// two iterations byte-identical.
+	$keys = array_values( array_filter( $keys, static fn( $k ) => $k !== '_formpipe_posted_hash' ) );
+	sort( $keys, SORT_STRING );
+
+	foreach ( $keys as $k ) {
+		$val = formpipe_flatten( $posted[ $k ] ?? '' );
+		if ( strlen( $val ) > 256 ) {
+			$val = substr( $val, 0, 256 );
+		}
+		$buf .= $k . '=' . $val . "\n";
 	}
-	return wp_hash( $concat, 'formpipe_submission' );
+
+	return formpipe_djb2_hex( $buf );
+}
+
+/**
+ * djb2 hash, hex-encoded (last 8 chars, matching the JS implementation).
+ *
+ * Client and server must produce byte-for-byte identical strings so
+ * `hash_equals()` succeeds. Mirrors `simpleHash()` in assets/form.js.
+ */
+function formpipe_djb2_hex( string $s ): string {
+	$h = 5381;
+	$len = strlen( $s );
+	for ( $i = 0; $i < $len; $i++ ) {
+		$h = ( ( ( $h << 5 ) + $h ) ^ ord( $s[ $i ] ) ) & 0xFFFFFFFF;
+	}
+	return substr( sprintf( '%08x', $h ), -8 );
 }
 
 function formpipe_form_hash( int $form_id ): string {

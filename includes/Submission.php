@@ -35,17 +35,42 @@ final class Submission {
 	}
 
 	private Form $form;
-	/** @var array<string,mixed> */
+
+	/**
+	 * Sanitized posted values. `_`-prefixed internal keys (except `_hp_*`
+	 * and `_formpipe_rendered_at`) are stripped here so they never reach
+	 * the mail composer or the validation values.
+	 *
+	 * @var array<string,mixed>
+	 */
 	private array $posted;
+
+	/**
+	 * Raw posted values, kept verbatim for the posted-data hash check.
+	 *
+	 * The hash is computed from the full request body — including the
+	 * internal `_formpipe_*` keys that `sanitize()` strips — so the hash
+	 * must be built from the un-stripped input. Held only for the spam
+	 * check; never sent to the mail composer or any user-facing render.
+	 *
+	 * @var array<string,mixed>
+	 */
+	private array $posted_raw = [];
+
 	/** @var array<string,string> */
 	private array $specials = [];
+
 	/** @var array<string,string[]> field name => saved file paths */
 	private array $uploads = [];
 
+	/** @var array<string,string> */
+	private array $consent = [];
+
 	public function __construct( Form $form, array $posted ) {
-		$this->form   = $form;
-		$this->posted = $this->sanitize( $posted );
-		self::$current = $this;
+		$this->form       = $form;
+		$this->posted     = $this->sanitize( $posted );
+		$this->posted_raw = $posted;
+		self::$current    = $this;
 	}
 
 	public function __destruct() {
@@ -79,9 +104,6 @@ final class Submission {
 		return $this->consent;
 	}
 
-	/** @var array<string,string> */
-	private array $consent = [];
-
 	/** @return array{status:string,message:string,errors:array} */
 	public function run(): array {
 		$upload_errors = $this->handle_uploads();
@@ -90,7 +112,7 @@ final class Submission {
 		if ( ! $validation->is_valid() ) {
 			$msg = $this->message_for_status( 'validation_error', $validation );
 			return [
-				'status'  => 'validation_failed',
+				'status'  => 'validation_error',
 				'message' => $msg,
 				'errors'  => $validation->get_errors(),
 			];
@@ -107,7 +129,7 @@ final class Submission {
 		if ( ! empty( $upload_errors ) ) {
 			$validation->add_error( key( $upload_errors ), reset( $upload_errors ) );
 			return [
-				'status'  => 'validation_failed',
+				'status'  => 'validation_error',
 				'message' => $this->message( 'validation_error' ),
 				'errors'  => $validation->get_errors(),
 			];
@@ -291,15 +313,18 @@ final class Submission {
 			return true;
 		}
 
-		// Posted-data hash (replay window).
+		// Posted-data hash (replay window). The client computes a djb2
+		// hash over the raw FormData; the server must do the same so the
+		// two strings agree. Iteration uses the *raw* (un-sanitized) POST
+		// because the JS side includes the internal `_formpipe_*` keys.
 		$posted_hash = (string) ( $_POST['_formpipe_posted_hash'] ?? '' );
 		if ( $posted_hash !== '' ) {
-			$tick = (int) ceil( time() / ( MINUTE_IN_SECONDS / 2 ) );
-			$expected = formpipe_posted_data_hash( $this->posted, (string) $tick, $unit_tag, $this->remote_ip() );
-			$prev_tick = (string) ( $tick - 1 );
-			$prev_expected = formpipe_posted_data_hash( $this->posted, $prev_tick, $unit_tag, $this->remote_ip() );
+			$tick        = (int) ceil( time() / ( MINUTE_IN_SECONDS / 2 ) );
+			$expected    = formpipe_posted_data_hash( $this->posted_raw, (string) $tick, $unit_tag );
+			$prev_tick   = $tick - 1;
+			$prev_expect = formpipe_posted_data_hash( $this->posted_raw, (string) $prev_tick, $unit_tag );
 
-			if ( ! hash_equals( $expected, $posted_hash ) && ! hash_equals( $prev_expected, $posted_hash ) ) {
+			if ( ! hash_equals( $expected, $posted_hash ) && ! hash_equals( $prev_expect, $posted_hash ) ) {
 				return true;
 			}
 		}
@@ -310,15 +335,25 @@ final class Submission {
 	private function cleanup_uploads(): void {
 		foreach ( $this->uploads as $paths ) {
 			foreach ( (array) $paths as $path ) {
-				if ( is_string( $path ) && is_file( $path ) && formpipe_is_file_path_in_content_dir( $path ) ) {
-					@unlink( $path );
+				// Defense in depth: refuse to unlink anything that isn't a
+				// regular file we own, refuses to follow symlinks (so a
+				// racing symlink swap can't redirect the unlink outside the
+				// formpipe-tmp dir), and lives inside wp-content/uploads.
+				if ( ! is_string( $path ) || ! file_exists( $path ) ) {
+					continue;
 				}
+				if ( is_link( $path ) ) {
+					continue;
+				}
+				if ( ! formpipe_is_file_path_in_content_dir( $path ) ) {
+					continue;
+				}
+				if ( ! is_file( $path ) || ! is_writable( $path ) ) {
+					continue;
+				}
+				@unlink( $path );
 			}
 		}
-	}
-
-	private function uploads_dir(): string {
-		return wp_normalize_path( wp_upload_dir()['basedir'] . '/formpipe-tmp' );
 	}
 
 	/** @param array<string,mixed> $in */

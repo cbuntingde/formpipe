@@ -1,8 +1,4 @@
-> **Notice — experimental build.** FormPipe is a modernized rewrite of *Contact Form 7*. It has **not** been rigorously tested and **has not** undergone a security audit. The upload handler, REST endpoints, and submission pipeline should be treated as pre-release. Do not deploy on a production site without independent review. The maintainers make no warranty as to fitness for any particular purpose.
-
-> Status: pre-release. Use only on staging or development sites until a tagged stable release is published.
-
- === FormPipe ===
+=== FormPipe ===
 Contributors: formpipe
 Tags: contact form, form, mail, captcha
 Requires at least: 6.5
@@ -16,9 +12,11 @@ A small, complete contact-form plugin for WordPress. CPT storage, one scanner, o
 
 == Description ==
 
+> **Notice — experimental build.** FormPipe is a modernized rewrite of *Contact Form 7*. It has **not** been rigorously tested and **has not** undergone a security audit. The upload handler, REST endpoints, and submission pipeline should be treated as pre-release. Do not deploy on a production site without independent review. The maintainers make no warranty as to fitness for any particular purpose.
+
 FormPipe is a contact-form plugin that ships with:
 
-- A single scanner for form-tags (text, email, url, tel, textarea, number, date, time, select, checkbox, radio, acceptance, quiz, file, hidden, submit, response, count, captcha).
+- A single scanner for form-tags (text, email, url, tel, textarea, number, date, time, select, checkbox, acceptance, quiz, file, hidden, submit, response, count, captcha).
 - A submission pipeline with: server-side validation, spam filters (honeypot, posted-data hash, render-time floor), acceptance gate, file-upload handler.
 - REST CRUD + a `/feedback` endpoint for ajax submission.
 - A Gutenberg block for embedding forms.
@@ -28,6 +26,11 @@ FormPipe is a contact-form plugin that ships with:
 = Privacy =
 
 FormPipe itself does not track users. Integrations (when installed) may contact external services; check the integration's documentation.
+
+= Hardening =
+
+* Set the `formpipe_require_captcha` filter to `true` to require a verified captcha on every ajax submission. Without it the public `/feedback` endpoint is gated only by the per-IP rate limit (default 10 submissions per minute; override via `formpipe_feedback_rate_limit`), the honeypot field, and the render-time floor.
+* For deployments behind a CDN that sets `CF-Connecting-IP` or `X-Forwarded-For`, define `FORMPIPE_TRUSTED_PROXY_HEADER` to the trusted header name so the rate limiter sees the real client IP.
 
 == Installation ==
 

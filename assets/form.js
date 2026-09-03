@@ -74,9 +74,16 @@
 			data[ pair[ 0 ] ] = pair[ 1 ];
 		}
 		const tick = Math.ceil( Date.now() / 30000 );
-		// Lightweight hash; Submission re-validates server-side.
+		// djb2 over `tick + '|' + unit_tag + '|' + sorted(k=v\n)`.
+		// Mirrored by `formpipe_posted_data_hash()` in includes/helpers.php
+		// so `hash_equals()` agrees byte-for-byte.
 		let s = tick + '|' + data._formpipe_unit_tag + '|';
+
 		Object.keys( data ).sort().forEach( function ( k ) {
+			// The hash field itself isn't part of the input — it gets
+			// populated after this loop runs. Excluding it here matches
+			// the server's iteration in `formpipe_posted_data_hash()`.
+			if ( k === '_formpipe_posted_hash' ) { return; }
 			s += k + '=' + String( data[ k ] ).slice( 0, 256 ) + '\n';
 		} );
 		return simpleHash( s );
@@ -98,13 +105,17 @@
 		}
 
 		const id = form.dataset.id;
-		const fd = collect( form );
 
-		// Compute the posted-data hash (replay protection).
+		// Compute the posted-data hash BEFORE collecting the FormData, so
+		// the hash value lands in the body the server sees. The server
+		// re-computes the same djb2 over the raw POST (including this
+		// hash field) and accepts the submission if the two match.
 		const hashInput = form.querySelector( 'input[name="_formpipe_posted_hash"]' );
 		if ( hashInput ) {
 			hashInput.value = buildPostedHash( form );
 		}
+
+		const fd = collect( form );
 
 		fetch( API_BASE + 'forms/' + id + '/feedback', {
 			method: 'POST',

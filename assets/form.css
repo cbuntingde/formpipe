@@ -26,7 +26,8 @@
 
 .formpipe .formpipe-response-output { margin-top: 1em; padding: .5em .75em; border-radius: 2px; }
 .formpipe .formpipe-response-output:empty { display: none; }
-.formpipe .formpipe-response-output[data-status="invalid"] { color: #b32d2e; }
+.formpipe .formpipe-response-output[data-status="invalid"],
+.formpipe .formpipe-response-output[data-status="validation_error"] { color: #b32d2e; }
 .formpipe .formpipe-response-output[data-status="mail_sent"] { color: #2e7d32; background: #e6f4ea; }
 .formpipe .formpipe-response-output[data-status="spam"],
 .formpipe .formpipe-response-output[data-status="mail_failed"] { color: #6b6b6b; background: #f6f7f7; }

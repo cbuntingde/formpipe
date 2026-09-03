@@ -1,16 +1,19 @@
 <?php
 /**
  * Plugin Name: FormPipe
+ * Plugin URI:  https://github.com/cbuntingde/formpipe
  * Description: A small contact-form plugin. CPT storage, one scanner, one admin page, one block, REST.
- * Author: FormPipe
- * License: GPL-2.0-or-later
- * Version: 1.0.0
+ * Version:     1.0.0
  * Requires at least: 6.5
- * Requires PHP: 8.0
+ * Requires PHP:      8.0
+ * Author:      FormPipe
+ * Author URI:  https://github.com/cbuntingde/formpipe
+ * License:     GPL-2.0-or-later
+ * License URI: https://www.gnu.org/licenses/gpl-2.0.html
+ * Text Domain: formpipe
+ * Domain Path: /languages
  *
- * STATUS: Experimental / pre-release. This plugin is a modernized rewrite of
- * Contact Form 7 and has NOT yet undergone rigorous testing or a security
- * audit. Do not deploy on production sites without independent review.
+ * @package FormPipe
  */
 defined( 'ABSPATH' ) || exit;
 

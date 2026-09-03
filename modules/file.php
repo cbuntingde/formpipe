@@ -19,7 +19,7 @@ add_action( 'formpipe_init', static function (): void {
 				'id'        => $tag->get_id_option() ?: null,
 				'class'     => $tag->get_class_option( 'formpipe-field' ) ?: null,
 				'tabindex'  => (int) ( $tag->get_option( 'tabindex', '-?\d+', true ) ?: 0 ) ?: null,
-				'size'      => (int) ( $tag->get_option( 'size', '\d+', true ) ?: 40 ),
+				'size'      => (int) ( $tag->get_option( 'size', '\d+', true ) ?:  40 ),
 				'accept'    => $tag->get_option( 'accept', '[A-Za-z0-9_,.\-/*+ ]+', true ) ?: null,
 			];
 
@@ -29,7 +29,7 @@ add_action( 'formpipe_init', static function (): void {
 			}
 
 			if ( $tag->is_required() ) {
-				$atts['required']      = true;
+				$atts['required'] =   true;
 				$atts['aria-required'] = 'true';
 			}
 
@@ -123,13 +123,57 @@ function formpipe_expected_mimes_for_extension( string $ext ): array {
 }
 
 /**
+ * True when the file's body contains PHP execution markers, regardless of
+ * claimed type. Reads up to 64 KiB; the markers are short and concentrated
+ * near the top of any plausible polyglot.
+ *
+ * Catches:
+ *   - `<?php ... ?>` opening tags
+ *   - `<? ... ?>` short tags
+ *   - `<script language="php">` (PHP < 7)
+ *   - `<% %>` ASP-style tags (when PHP is configured with asp_tags=1)
+ *
+ * This is a defense-in-depth check on top of WP's
+ * `wp_check_filetype_and_ext()` and the magic-byte sniff. A polyglot that
+ * satisfies WP (e.g. has a real JPEG header) but also embeds PHP bytes is
+ * rejected here even if the extension passes the layer-1 and layer-2
+ * gates.
+ */
+function formpipe_upload_contains_php( string $path ): bool {
+	if ( ! is_readable( $path ) ) {
+		return false;
+	}
+
+	$head = @file_get_contents( $path, false, null, 0, 65536 );
+	if ( ! is_string( $head ) || $head === '' ) {
+		return false;
+	}
+
+	if ( str_contains( $head, '<?php' ) ) {
+		return true;
+	}
+	if ( preg_match( '/<\?(?!xml)\s/', $head ) ) {
+		return true;
+	}
+	if ( str_contains( $head, '<script' ) && preg_match( '/<script\b[^>]*language\s*=\s*["\']?php/i', $head ) ) {
+		return true;
+	}
+	if ( str_contains( $head, '<%' ) ) {
+		return true;
+	}
+
+	return false;
+}
+
+/**
  * Validate one uploaded file against a comma-separated allowlist of extensions.
  *
- * Three layers so polyglots can't slip through:
+ * Four layers so polyglots can't slip through:
  *   1. basename script-bait regex (no `evil.php` even if extension allowed)
- *   2. wp_check_filetype_and_ext (WP's preferred check)
+ *   2. wp_check_filetype_and_ext (WP's preferred extension/MIME check)
  *   3. independent content sniff (finfo + magic-byte fallback) gated on
- *      the extension's expected mimes.
+ *      the extension's expected mimes
+ *   4. raw-bytes scan for PHP execution markers (defense-in-depth)
  *
  * @return true|\WP_Error
  */
@@ -146,15 +190,38 @@ function formpipe_validate_upload( string $tmp, string $name, string $filetypes 
 	$safe = formpipe_antiscript_file_name( $name );
 
 	$base = strtolower( pathinfo( $safe, PATHINFO_FILENAME ) );
+	// Reject any segment of the stem or final extension whose name is a
+	// known server-side execution extension. The regex matches the base
+	// filename only — a filename like `evil.php.jpg` is rejected via the
+	// second branch (`pathinfo(... PATHINFO_EXTENSION)`) because the
+	// stem still contains `evil.php`.
 	if ( preg_match( '/^(php|phtml|phar|cgi|pl|py|sh|asp|aspx|jsp)\d*$/', $base ) ) {
+		return new \WP_Error( 'formpipe_upload_type', __( 'That file type is not allowed.', 'formpipe' ) );
+	}
+	if ( str_contains( $base, '.php' ) || str_contains( $base, '.phtml' ) || str_contains( $base, '.phar' ) ) {
 		return new \WP_Error( 'formpipe_upload_type', __( 'That file type is not allowed.', 'formpipe' ) );
 	}
 
 	$ext = strtolower( pathinfo( $safe, PATHINFO_EXTENSION ) );
-	wp_check_filetype_and_ext( $tmp, $safe );
+
+	// Layer 1: WP's preferred extension/MIME check. If WP says the file
+	// type is not allowed (e.g. because the name is `evil.php.jpg` and
+	// WP detected PHP markers in the body), reject immediately. The
+	// return tuple is `[ ext, type ]` — `[ false, false ]` when WP
+	// could not classify.
+	$wp_check = wp_check_filetype_and_ext( $tmp, $safe );
+	$wp_ext   = is_array( $wp_check ) ? ( $wp_check['ext'] ?? false ) : false;
+	$wp_type  = is_array( $wp_check ) ? ( $wp_check['type'] ?? false ) : false;
+
+	if ( $wp_ext === false || $wp_ext !== $ext ) {
+		return new \WP_Error( 'formpipe_upload_type', __( 'That file type is not allowed.', 'formpipe' ) );
+	}
+
 	$ext_ok = in_array( $ext, $allowed, true );
 
-	// Independent content sniff: always runs.
+	// Layer 2: independent content sniff (finfo + magic-byte fallback).
+	// Gated on the extension's expected MIME list so a polyglot claimed
+	// as `.jpg` but containing PHP bytes is rejected.
 	$content_mime = formpipe_sniff_mime( $tmp );
 	$expected     = formpipe_expected_mimes_for_extension( $ext );
 
@@ -166,6 +233,12 @@ function formpipe_validate_upload( string $tmp, string $name, string $filetypes 
 		if ( in_array( $ext, $sniffable, true ) ) {
 			$ext_ok = false;
 		}
+	}
+
+	// Layer 3: belt-and-suspenders content scan. Any uploaded file with
+	// PHP-like bytes in its body is rejected regardless of claimed type.
+	if ( formpipe_upload_contains_php( $tmp ) ) {
+		return new \WP_Error( 'formpipe_upload_type', __( 'That file type is not allowed.', 'formpipe' ) );
 	}
 
 	if ( ! $ext_ok ) {
